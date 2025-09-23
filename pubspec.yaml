@@ -1,0 +1,39 @@
+name: orventus_web
+description: A new Flutter project.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.3 <4.0.0' # Uses a modern Dart SDK version
+
+# --- APPLICATION DEPENDENCIES ---
+dependencies:
+  flutter:
+    sdk: flutter
+  location: ^5.0.3 # <-- ADD THIS LINE (check pub.dev for latest)
+
+  # For making HTTP API calls
+  dio: ^5.4.1
+
+  socket_io_client: ^2.0.3
+
+  # For secure on-device storage
+  flutter_secure_storage: ^9.0.0
+  cupertino_icons: ^1.0.2
+
+  # For Google Maps widget
+  google_maps_flutter: ^2.5.3
+  google_maps_flutter_web: ^0.5.5
+
+  # For Google Places Autocomplete UI
+
+
+# --- DEVELOPMENT DEPENDENCIES ---
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true

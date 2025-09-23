@@ -1,0 +1,254 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:dio/browser.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../models/place_prediction_model.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'dart:convert';
+
+class ApiService {
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  late Dio _dio;
+  late IO.Socket _socket; // <-- THIS WAS THE MISSING VARIABLE
+
+  final _storage = const FlutterSecureStorage();
+  final String _baseUrl = "http://localhost:3000/api/v1";
+
+  ApiService._internal() {
+    _dio = Dio(BaseOptions(baseUrl: _baseUrl));
+    if (kIsWeb) {
+      final adapter = BrowserHttpClientAdapter();
+      adapter.withCredentials = true;
+      _dio.httpClientAdapter = adapter;
+    }
+    _dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) async {
+      final accessToken = await _storage.read(key: 'accessToken');
+      if (accessToken != null) {
+        options.headers['Authorization'] = 'Bearer $accessToken';
+      }
+      return handler.next(options);
+    }));
+    _initSocket();
+
+  }
+  void _initSocket() {
+    _socket = IO.io(_baseUrl, <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+    });
+    _socket.onConnect((_) => print('ApiService: Socket connected! ID: ${_socket.id}'));
+    _socket.onDisconnect((reason) => print('ApiService: Socket disconnected. Reason: $reason'));
+  }
+
+  void connectSocket() { if (!_socket.connected) _socket.connect(); }
+  void disconnectSocket() { _socket.dispose(); _initSocket(); }
+
+  void listenToRideUpdates(int rideId, Function(dynamic) handler) {
+    connectSocket();
+    final eventName = 'ride-update-$rideId';
+    _socket.on(eventName, handler);
+  }
+
+  void stopListeningToRideUpdates(int rideId) {
+    final eventName = 'ride-update-$rideId';
+    _socket.off(eventName);
+  }
+
+  // --- THIS IS THE DIAGNOSTIC FUNCTION ---
+  Future<List<PlacePrediction>> getPlacePredictions(String input) async {
+    print('--- [1] getPlacePredictions CALLED with input: "$input" (Type: ${input.runtimeType}) ---');
+    
+    if (input.trim().isEmpty) {
+      print('--- [2] EXIT: Input is empty. Returning []. ---');
+      return [];
+    }
+
+    print('--- [3] Input guard passed. Entering TRY block. ---');
+    try {
+      print('--- [4] Making API call to /misc/places... ---');
+      final response = await _dio.get('/misc/places', queryParameters: {'input': input});
+      print('--- [5] API call SUCCEEDED. Status: ${response.statusCode} ---');
+
+      if (response.data != null && response.data['status'] == 'OK') {
+        final List<dynamic> predictionsJson = response.data['predictions'];
+        final predictions = predictionsJson.map((json) => PlacePrediction.fromJson(json)).toList();
+        print('--- [6] SUCCESS: Got ${predictions.length} predictions. Returning data. ---');
+        return predictions;
+      } else {
+        print('--- [7] API returned non-OK status: ${response.data['status']}. Returning []. ---');
+        return [];
+      }
+    } on DioException catch (e) {
+      print('--- [8] DIO EXCEPTION CAUGHT: ${e.message} ---');
+      if (e.response != null) {
+        print('--- [8a] Response Data: ${e.response?.data} ---');
+      }
+      return [];
+    } catch (e) {
+      print('--- [9] UNKNOWN EXCEPTION CAUGHT: $e ---');
+      return [];
+    }
+  }
+
+  // --- All other methods remain the same ---
+  // ... (login, logout, getMyProfile, etc.)
+
+  // --- AUTH METHODS ---
+  Future<void> requestOtp(String name, String phone, String role) async {
+    try {
+      await _dio.post('/auth/login', data: {'name': name, 'phone': phone, 'role': role});
+    } on DioException catch (e) {
+      throw Exception('Failed to request OTP: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+  // The return type is now correct
+Future<Map<String, dynamic>> verifyOtpAndLogin(String phone, String otp) async {
+  try {
+    final response = await _dio.post(
+      '/auth/verify',
+      data: {'phone': phone, 'otp': otp},
+    );
+    
+    final responseData = response.data;
+    if (responseData.containsKey('accessToken') && responseData.containsKey('user')) {
+      await _storage.write(key: 'accessToken', value: responseData['accessToken']);
+      await _storage.write(key: 'userRole', value: responseData['user']['role']);
+      if (responseData.containsKey('refreshToken')) {
+         await _storage.write(key: 'refreshToken', value: responseData['refreshToken']);
+      }
+    }
+    // --- THIS IS THE CRITICAL FIX ---
+    return responseData; // Return the data so the LoginPage can use it
+  } on DioException catch (e) {
+    throw Exception('Failed to verify OTP: ${e.response?.data['msg'] ?? e.message}');
+  }
+}
+  
+  Future<void> logout() async {
+    final refreshToken = await _storage.read(key: 'refreshToken');
+    try {
+      if (refreshToken != null) {
+        await _dio.post('/auth/logout', data: {'refreshToken': refreshToken});
+      }
+    } finally {
+      await _storage.deleteAll();
+      disconnectSocket(); // Disconnect socket on logout
+    }
+  }
+
+  // --- USER PROFILE METHODS ---
+  Future<Map<String, dynamic>> getMyProfile() async {
+    try {
+      final response = await _dio.get('/user/me');
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Failed to get profile: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+  
+  Future<Map<String, dynamic>> updateMyProfile(String name) async {
+    try {
+      final response = await _dio.put('/user/me', data: {'name': name});
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Failed to update profile: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+  // --- RIDE METHODS ---
+  Future<List<dynamic>> getMyRideHistory() async {
+    try {
+      final response = await _dio.get('/rides/my-history');
+      return response.data['rides'];
+    } on DioException catch (e) {
+      throw Exception('Failed to load ride history: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+  Future<List<dynamic>> getAvailableRides() async {
+    try {
+      final response = await _dio.get('/rides/available');
+      return response.data['rides'];
+    } on DioException catch (e) {
+      throw Exception('Failed to load available rides: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+  Future<Map<String, dynamic>> acceptRide(int rideId) async {
+    try {
+      final response = await _dio.put('/rides/$rideId/accept');
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Failed to accept ride: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+
+Future<List<dynamic>> getRideEstimates(String pickupAddress, String dropAddress) async {
+    try {
+      final response = await _dio.post('/rides/estimate', data: {'pickupAddress': pickupAddress, 'dropAddress': dropAddress});
+      return response.data['estimates'];
+    } on DioException catch (e) {
+      throw Exception('Failed to get estimates: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+Future<Map<String, dynamic>> createRide(String pickupAddress, String dropAddress, String vehicle, double fare) async {
+    try {
+      final response = await _dio.post('/rides', data: {
+        'pickupAddress': pickupAddress,
+        'dropAddress': dropAddress,
+        'vehicle': vehicle,
+        'fare': fare
+      });
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Failed to create ride: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+  Future<void> testPlacesApi() async {
+  print('--- TESTING PLACES API VIA BACKEND PROXY ---');
+  try {
+    // Use our authenticated dio instance to call our own backend
+    final response = await _dio.get(
+      '/misc/places', // This is our new backend endpoint
+      queryParameters: {
+        'input': 'kengeri', // The search term
+      },
+    );
+    print('SUCCESS! Backend proxy responded with:');
+    print(response.data);
+  } on DioException catch (e) {
+    print('ERROR! Backend proxy failed with:');
+    if (e.response != null) {
+      print('Status Code: ${e.response?.statusCode}');
+      print('Response Data: ${e.response?.data}');
+    } else {
+      print('Error without response: ${e.message}');
+    }
+  }
+}
+// In lib/api/api_service.dart
+
+// In lib/api/api_service.dart
+void sendRiderLocation(int rideId, double lat, double lng) {
+    if (_socket.connected) {
+      _socket.emit('rider-location-update', {
+        'rideId': rideId,
+        'lat': lat,
+        'lng': lng,
+      });
+    }
+  }
+
+Future<Map<String, dynamic>> updateRideStatus(int rideId, String status) async {
+    try {
+      final response = await _dio.put('/rides/$rideId/status', data: {'status': status});
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Failed to update ride status: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+}
