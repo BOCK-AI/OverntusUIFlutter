@@ -7,22 +7,28 @@ class MobileServices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tiles = [
-      {'title': 'AVT', 'icon': Icons.electric_rickshaw, 'desc': 'Autonomous Vehicle Technology: Autonomous vehicles rides for short distances.'},
-      {'title': 'Trip', 'icon': Icons.local_taxi, 'desc': 'Book a taxi for your trip across the city.'},
-      {'title': 'Reserve', 'icon': Icons.event, 'desc': 'Reserve a ride in advance for your planned events.'},
-      {'title': 'Rentals', 'icon': Icons.key, 'desc': 'Rent vehicles for hours or days as per your need.'},
-      {'title': 'Intercity', 'icon': Icons.directions_car, 'desc': 'Travel between cities with comfort and safety.'},
-      {'title': 'Teens', 'icon': Icons.child_care, 'desc': 'Special rides and safety features for teenagers.'},
-      {'title': 'Transit', 'icon': Icons.train, 'desc': 'Connect to public transit options for longer journeys.'},
+    // Service tiles to match the screenshot, no Bike/Taxi
+    // The order and names are tailored to the screen you provided
+    final services = [
+      {'label': 'AVT', 'icon': Icons.electric_rickshaw, 'desc': 'Autonomous Vehicle Technology: Autonomous vehicles rides for short distances.'},
+      {'label': 'Reserve', 'icon': Icons.event, 'desc': 'Reserve a ride in advance for your planned events.'},
+      {'label': 'Rentals', 'icon': Icons.key, 'desc': 'Rent vehicles for hours or days as per your need.'},
+      {'label': 'Intercity', 'icon': Icons.directions_car, 'desc': 'Travel between cities with comfort and safety.'},
+      {'label': 'Teens', 'icon': Icons.child_care, 'desc': 'Special rides and safety features for teenagers.'},
+      {'label': 'Seniors', 'icon': Icons.elderly, 'desc': 'Convenient and safe rides for seniors.'},
+      {'label': 'Transit', 'icon': Icons.train, 'desc': 'Connect to public transit options for longer journeys.'},
+    ];
+
+    final courier = [
+      {'label': 'Courier', 'icon': Icons.delivery_dining, 'desc': 'Deliver packages to any address.'},
+      {'label': 'Store pick-up', 'icon': Icons.local_grocery_store, 'desc': 'Get items picked up from stores and delivered.'},
     ];
 
     return PopScope(
-      
-      canPop: false, // This blocks the system back button
-  onPopInvokedWithResult: (didPop, result) {
-    // Do nothing, so back button is blocked
-  },
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        // Prevent default back
+      },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Services'),
@@ -30,30 +36,75 @@ class MobileServices extends StatelessWidget {
             icon: const Icon(Icons.arrow_back),
             onPressed: () {
               if (onTabSwitch != null) {
-                onTabSwitch!(0); // Go to Home tab
+                onTabSwitch!(0);
               }
             },
           ),
         ),
         body: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(0),
           children: [
-            Section(
-              title: 'Services',
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: tiles
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+              child: Text(
+                'Go anywhere, get anything',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 12,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.12,
+                children: services
                     .map(
-                      (t) => _ServiceTile(
-                        label: t['title'] as String,
-                        icon: t['icon'] as IconData,
-                        description: t['desc'] as String,
+                      (srv) => _ServiceTile(
+                        label: srv['label'] as String,
+                        icon: srv['icon'] as IconData,
+                        description: srv['desc'] as String,
                       ),
                     )
                     .toList(),
               ),
             ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 32, 16, 8),
+              child: Text(
+                'Get Courier to help',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: courier
+                    .map(
+                      (srv) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _ServiceTile(
+                            label: srv['label'] as String,
+                            icon: srv['icon'] as IconData,
+                            description: srv['desc'] as String,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -86,14 +137,20 @@ class _ServiceTile extends StatelessWidget {
           );
         },
         child: Container(
-          width: 100,
-          padding: const EdgeInsets.all(12),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 6),
+          margin: EdgeInsets.zero,
           decoration: cardDecoration(context),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 28),
-              const SizedBox(height: 8),
-              Text(label),
+              Icon(icon, size: 36),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14),
+              ),
             ],
           ),
         ),
