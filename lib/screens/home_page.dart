@@ -4,16 +4,16 @@ import '../api/api_service.dart';
 import '../widgets/rider_dashboard_view.dart';
 import '../widgets/ride_options_dialog.dart';
 
-// Changed to StatefulWidget
-class HomePageWeb extends StatefulWidget {
-  const HomePageWeb({super.key});
+// The class name is now consistently `HomePage`
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<HomePageWeb> createState() => _HomePageWebState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageWebState extends State<HomePageWeb> {
-  // --- STATE MANAGEMENT & CONTROLLERS ---
+class _HomePageState extends State<HomePage> {
+  // --- STATE MANAGEMENT & CONTROLLERS (INJECTED) ---
   final ApiService _apiService = ApiService();
   String? _accessToken;
   String? _userRole;
@@ -35,7 +35,7 @@ class _HomePageWebState extends State<HomePageWeb> {
     super.dispose();
   }
 
-  // --- LOGIC FUNCTIONS ---
+  // --- LOGIC FUNCTIONS (INJECTED) ---
 
   Future<void> _checkLoginStatus() async {
     const storage = FlutterSecureStorage();
@@ -107,9 +107,10 @@ class _HomePageWebState extends State<HomePageWeb> {
     }
   }
 
-  // --- ORIGINAL UI HELPER METHODS ---
+  // --- ALL OF YOUR ORIGINAL UI HELPER METHODS (UNCHANGED) ---
 
   double _maxBodyWidth(BoxConstraints c) => c.maxWidth.clamp(320.0, 1280.0);
+
   Widget _spacerH(double h) => SizedBox(height: h);
 
   Widget _pillButton({
@@ -147,7 +148,7 @@ class _HomePageWebState extends State<HomePageWeb> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none
+        borderSide: BorderSide.none,
       ),
     );
   }
@@ -160,7 +161,10 @@ class _HomePageWebState extends State<HomePageWeb> {
         borderRadius: radius ?? BorderRadius.circular(18),
       ),
       alignment: Alignment.center,
-      child: const Text('TODO: Add Image', style: TextStyle(color: Colors.black54)),
+      child: const Text(
+        'TODO: Add Image',
+        style: TextStyle(color: Colors.black54),
+      ),
     );
   }
 
@@ -170,7 +174,10 @@ class _HomePageWebState extends State<HomePageWeb> {
     VoidCallback? onDetails,
   }) {
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFFF6F6F6), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F6F6),
+        borderRadius: BorderRadius.circular(18),
+      ),
       padding: const EdgeInsets.all(22),
       child: Row(
         children: [
@@ -194,7 +201,10 @@ class _HomePageWebState extends State<HomePageWeb> {
             ),
           ),
           const SizedBox(width: 16),
-          Expanded(flex: 2, child: _imagePlaceholder(height: 120, radius: BorderRadius.circular(14))),
+          Expanded(
+            flex: 2,
+            child: _imagePlaceholder(height: 120, radius: BorderRadius.circular(14)),
+          ),
         ],
       ),
     );
@@ -264,7 +274,7 @@ class _HomePageWebState extends State<HomePageWeb> {
       },
     );
   }
-  
+
   Widget _benefitRow(IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,6 +288,8 @@ class _HomePageWebState extends State<HomePageWeb> {
 
   Widget _benefitDivider() => Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Colors.black12));
 
+  // --- BUILD METHOD (MODIFIED) ---
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -287,7 +299,7 @@ class _HomePageWebState extends State<HomePageWeb> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: _buildTopNav(context, isLoggedIn), // Using a helper for the AppBar
+      appBar: _buildTopNav(context, isLoggedIn), // Using a helper for the dynamic AppBar
       body: SingleChildScrollView(
         child: (isLoggedIn && _userRole == 'rider')
             ? const RiderDashboardView()
@@ -296,14 +308,14 @@ class _HomePageWebState extends State<HomePageWeb> {
     );
   }
 
-  // --- DYNAMIC APPBAR HELPER ---
+  // --- NEW DYNAMIC APPBAR HELPER (REPLACES _TopNav) ---
   AppBar _buildTopNav(BuildContext context, bool isLoggedIn) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
     return AppBar(
       backgroundColor: Colors.black,
-      automaticallyImplyLeading: false,
+      automaticallyImplyLeading: false, // Prevents default back button
       title: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text('Orventus', style: TextStyle(color: primary, fontSize: 22, fontWeight: FontWeight.w800)),
@@ -343,8 +355,11 @@ class _HomePageWebState extends State<HomePageWeb> {
     );
   }
 
-  // --- CUSTOMER VIEW HELPER ---
+  // --- HELPER TO BUILD THE CUSTOMER/LOGGED-OUT VIEW ---
   Widget _buildCustomerView(BuildContext context, bool isLoggedIn) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
+
     return Column(
       children: [
         // HERO
@@ -557,12 +572,11 @@ class _HomePageWebState extends State<HomePageWeb> {
         }),
 
         _spacerH(24),
-
         _imageTextSection(imageLeft: true, title: 'Drive when you want, make what you need', subtitle: 'Make money on your schedule with deliveries or rides—or both. You can use your own car or choose a rental through Orventus.', cta: 'Get started', onCta: () => Navigator.pushNamed(context, '/login'), secondaryLinkText: 'Already have an account? Sign in', onSecondary: () => Navigator.pushNamed(context, '/login')),
         _imageTextSection(imageLeft: false, title: 'The Orventus you know, reimagined for business', subtitle: 'Orventus for Business is a platform for managing global rides and meals, and local deliveries, for companies of any size.', cta: 'Get started', onCta: () => Navigator.pushNamed(context, '/login'), secondaryLinkText: 'Check out our solutions', onSecondary: () {}),
         _imageTextSection(imageLeft: true, title: 'Make money by renting out your car', subtitle: 'Connect with thousands of drivers and earn more per week with Orventus fleet management tools.', cta: 'Get started', onCta: () => Navigator.pushNamed(context, '/login')),
         _spacerH(40),
-
+        
         // FOOTER
         Container(
           color: Colors.black,
@@ -576,7 +590,7 @@ class _HomePageWebState extends State<HomePageWeb> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Orventus', style: TextStyle(color: Colors.black, fontSize: 22, fontWeight: FontWeight.w800)),
+                    Text('Orventus', style: TextStyle(color: primary, fontSize: 22, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 18),
                     const Wrap(spacing: 32, runSpacing: 12, children: [_FooterLink('About'), _FooterLink('Help'), _FooterLink('Careers'), _FooterLink('Privacy'), _FooterLink('Terms')]),
                     const SizedBox(height: 20),

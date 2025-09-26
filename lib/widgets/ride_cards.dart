@@ -1,77 +1,61 @@
-import 'package:flutter/material.dart';
-import 'common.dart';
+// lib/widgets/ride_cards.dart
 
-class RideCards extends StatelessWidget {
-  const RideCards({super.key});
+import 'package:flutter/material.dart';
+import '../api/api_service.dart'; // Make sure this import is correct
+import '../models/ride_model.dart'; // Make sure you have a RideModel
+
+class RideStatus extends StatefulWidget {
+  final RideModel ride;
+  const RideStatus({super.key, required this.ride});
 
   @override
-  Widget build(BuildContext context) {
-    return Section(
-      title: 'Ride options',
-      subtitle: 'Choose the ride that fits your needs',
-      child: Center(
-        child: Wrap(
-          spacing: 16,
-          runSpacing: 16,
-          children: const [
-            _RideCard(title: 'Orventus Go', description: 'Everyday rides at everyday prices.'),
-            _RideCard(title: 'Orventus Premium', description: 'High-end cars for a little more comfort.'),
-            _RideCard(title: 'Orventus XL', description: 'More room for groups up to 6.'),
-          ],
-        ),
-      ),
-    );
-  }
+  State<RideStatus> createState() => _RideStatusState();
 }
 
-class _RideCard extends StatelessWidget {
-  final String title;
-  final String description;
-  const _RideCard({required this.title, required this.description});
+class _RideStatusState extends State<RideStatus> {
+  final ApiService _apiService = ApiService();
+  late RideModel _currentRide;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentRide = widget.ride;
+    _setupWebSocketListeners();
+  }
+
+  void _setupWebSocketListeners() {
+    // Construct the full event name here
+    final String eventName = 'ride-update-${_currentRide.id}';
+    
+    // Call the corrected function with the full event name
+    _apiService.listenToRideUpdates(eventName, (data) {
+      if (mounted) {
+        setState(() {
+          // Assuming the backend sends back the full ride object on update
+          _currentRide = RideModel.fromJson(data); 
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Construct the event name again to stop listening
+    final String eventName = 'ride-update-${_currentRide.id}';
+    _apiService.stopListeningToRideUpdates(eventName);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 340,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 16)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.black,
-                child: Icon(Icons.local_taxi, color: Colors.white, size: 32),
-              ),
-              const SizedBox(width: 14),
-              Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(description, style: const TextStyle(fontSize: 16, color: Colors.black87)),
-          const SizedBox(height: 18),
-          Row(
-            children: [
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white),
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Selected $title'))),
-                child: const Text('Request'),
-              ),
-              const SizedBox(width: 12),
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: Colors.black),
-                onPressed: () => Navigator.pushNamed(context, '/login'),
-                child: const Text('See details'),
-              ),
-            ],
-          ),
-        ],
+    // This is an example UI for a ride card.
+    // You can customize it to match your app's design.
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      child: ListTile(
+        title: Text('Ride to: ${_currentRide.dropoffAddress}'),
+        subtitle: Text('Status: ${_currentRide.status}'),
+        trailing: Text('Fare: \$${_currentRide.fare.toStringAsFixed(2)}'),
       ),
     );
   }

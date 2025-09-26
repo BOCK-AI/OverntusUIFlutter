@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   location: ^5.0.3 # <-- ADD THIS LINE (check pub.dev for latest)
+  flutter_polyline_points: ^2.0.0 # Or latest
 
   # For making HTTP API calls
   dio: ^5.4.1

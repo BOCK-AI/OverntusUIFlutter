@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:location/location.dart';
 import '../api/api_service.dart';
 
 class ActiveRidePage extends StatefulWidget {
@@ -11,8 +13,40 @@ class ActiveRidePage extends StatefulWidget {
 
 class _ActiveRidePageState extends State<ActiveRidePage> {
   final ApiService _apiService = ApiService();
-  String _currentStatus = 'ACCEPTED'; // The initial status when this page loads
+  String _currentStatus = 'ACCEPTED';
+  final Location _locationService = Location();
+  StreamSubscription<LocationData>? _locationSubscription;
 
+  @override
+  void initState() {
+    super.initState();
+    _startLocationTracking();
+  }
+
+  @override
+  void dispose() {
+    _locationSubscription?.cancel();
+    _apiService.stopListeningToRideUpdates('ride-location-update-${widget.rideId}');
+    super.dispose();
+  }
+
+  // --- THIS IS THE NEW FUNCTION ---
+  void _startLocationTracking() {
+    _apiService.connectSocket();
+    _locationService.changeSettings(distanceFilter: 10); // Update every 10 meters
+
+    _locationSubscription = _locationService.onLocationChanged.listen((LocationData currentLocation) {
+      if (currentLocation.latitude != null && currentLocation.longitude != null) {
+        print('RIDER LOCATION SENDING: Lat: ${currentLocation.latitude}, Lng: ${currentLocation.longitude}');
+        _apiService.sendRiderLocation(
+          widget.rideId,
+          currentLocation.latitude!,
+          currentLocation.longitude!,
+        );
+      }
+    });
+  }
+  
   // This function calls the backend to update the ride's status
   void _updateStatus(String newStatus) async {
     try {

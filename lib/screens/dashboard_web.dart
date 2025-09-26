@@ -4,6 +4,12 @@ import 'package:location/location.dart';
 import '../api/api_service.dart';
 import '../models/place_prediction_model.dart';
 import '../widgets/ride_options_dialog.dart';
+import 'dart:math'; // Needed for min/max functions
+import 'package:flutter_polyline_points/flutter_polyline_points.dart'; // <-- NEW, RELIABLE PACKAGE
+
+// At the top of lib/screens/dashboard_web.dart
+
+// At the top of lib/screens/dashboard_web.dart
 
 class DashboardWeb extends StatefulWidget {
   const DashboardWeb({super.key});
@@ -13,19 +19,22 @@ class DashboardWeb extends StatefulWidget {
 }
 
 class _DashboardWebState extends State<DashboardWeb> {
-  // Services and State
   final ApiService _apiService = ApiService();
   final Location _locationService = Location();
+
   Map<String, dynamic>? _currentUser;
   bool _isLoading = true;
   bool _isFetchingEstimates = false;
 
-  // Controllers
   final TextEditingController _pickupController = TextEditingController();
   final TextEditingController _dropoffController = TextEditingController();
   late GoogleMapController _mapController;
-
   LatLng _initialCameraPosition = const LatLng(12.9716, 77.5946);
+
+  PlacePrediction? _selectedPickup;
+  PlacePrediction? _selectedDropoff;
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
 
   @override
   void initState() {
@@ -42,8 +51,8 @@ class _DashboardWebState extends State<DashboardWeb> {
 
   // --- LOGIC FUNCTIONS ---
 
-  Future<void> _initializeDashboard() async {
-    await Future.wait([_fetchProfile(), _initializeLocation()]);
+ Future<void> _initializeDashboard() async {
+    await _fetchProfile();
     if (mounted) setState(() => _isLoading = false);
   }
   
@@ -72,7 +81,7 @@ class _DashboardWebState extends State<DashboardWeb> {
       if (locationData.latitude != null && locationData.longitude != null) {
         final userLocation = LatLng(locationData.latitude!, locationData.longitude!);
         setState(() => _initialCameraPosition = userLocation);
-        // We need to check if mapController has been initialized before using it
+        // This check is important because the map might not be created yet
         if (mounted && _mapController != null) {
           _mapController.animateCamera(CameraUpdate.newLatLngZoom(userLocation, 15.0));
         }
@@ -85,22 +94,55 @@ class _DashboardWebState extends State<DashboardWeb> {
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     // After the map is created, we can try to move to the user's location if we already have it.
-    _mapController.animateCamera(CameraUpdate.newLatLngZoom(_initialCameraPosition, 15.0));
+    _mapController.animateCamera(CameraUpdate.newLatLngZoom(_initialCameraPosition, 12.0));
   }
   
-  void _handleSearch() async {
-    if (_pickupController.text.trim().isEmpty || _dropoffController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select locations.'), backgroundColor: Colors.red));
+  // In lib/screens/dashboard_web.dart
+
+ // In lib/screens/dashboard_web.dart
+
+void _handleSearch() async {
+    if (_selectedPickup == null || _selectedDropoff == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select valid locations.'), backgroundColor: Colors.red));
       return;
     }
     setState(() { _isFetchingEstimates = true; });
     try {
-      final estimates = await _apiService.getRideEstimates(_pickupController.text, _dropoffController.text);
+      final result = await _apiService.initiateRide(_selectedPickup!.placeId, _selectedDropoff!.placeId);
+      
+      _markers.clear();
+      _polylines.clear();
+
+      // --- THIS IS THE NEW, CORRECT WAY TO DECODE ---
+      PolylinePoints polylinePoints = PolylinePoints();
+      List<PointLatLng> decodedResult = polylinePoints.decodePolyline(result['polyline']);
+      List<LatLng> points = decodedResult.map((point) => LatLng(point.latitude, point.longitude)).toList();
+      // --- END FIX ---
+      
+      if (points.isEmpty) throw Exception("Could not decode polyline");
+
+      final Polyline routePolyline = Polyline(polylineId: const PolylineId('route'), color: Colors.blueAccent, width: 6, points: points);
+
+      final LatLng start = LatLng(result['startLocation']['lat'], result['startLocation']['lng']);
+      final LatLng end = LatLng(result['endLocation']['lat'], result['endLocation']['lng']);
+      _markers.add(Marker(markerId: const MarkerId('pickup'), position: start, infoWindow: const InfoWindow(title: 'Pickup')));
+      _markers.add(Marker(markerId: const MarkerId('dropoff'), position: end, infoWindow: const InfoWindow(title: 'Dropoff')));
+      
+      setState(() { _polylines.add(routePolyline); });
+
+      _mapController.animateCamera(CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(min(start.latitude, end.latitude), min(start.longitude, end.longitude)),
+          northeast: LatLng(max(start.latitude, end.latitude), max(start.longitude, end.longitude)),
+        ),
+        100.0,
+      ));
+      
       if (!mounted) return;
       showDialog(
         context: context,
         builder: (context) => RideOptionsDialog(
-          estimates: estimates,
+          estimates: result['estimates'],
           onRideSelected: (selectedEstimate) => _handleCreateRide(selectedEstimate),
         ),
       );
@@ -129,23 +171,20 @@ class _DashboardWebState extends State<DashboardWeb> {
     }
   }
 
-  Widget _buildAutocompleteField({ required TextEditingController controller, required String labelText }) {
+  Widget _buildAutocompleteField({ required TextEditingController controller, required String labelText, required Function(PlacePrediction) onSelected }) {
     return Autocomplete<PlacePrediction>(
-      displayStringForOption: (PlacePrediction option) => option.description,
-      optionsBuilder: (TextEditingValue textEditingValue) async {
-        if (textEditingValue.text.isEmpty) {
-          return const Iterable<PlacePrediction>.empty();
-        }
-        return await _apiService.getPlacePredictions(textEditingValue.text);
+      displayStringForOption: (option) => option.description,
+      optionsBuilder: (value) async {
+        if (value.text.isEmpty) return const Iterable.empty();
+        return await _apiService.getPlacePredictions(value.text);
       },
-      onSelected: (PlacePrediction selection) {
-        controller.text = selection.description;
-      },
+      onSelected: onSelected,
       fieldViewBuilder: (context, fieldController, fieldFocusNode, onFieldSubmitted) {
         return TextField(
           controller: fieldController,
           focusNode: fieldFocusNode,
           decoration: InputDecoration(labelText: labelText),
+          onChanged: (text) => controller.text = text,
         );
       },
     );
@@ -184,22 +223,33 @@ class _DashboardWebState extends State<DashboardWeb> {
               children: [
                 const Text('Get a ride', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 24),
-                _buildAutocompleteField(controller: _pickupController, labelText: 'Pickup location'),
+                _buildAutocompleteField(
+                  controller: _pickupController,
+                  labelText: 'Pickup location',
+                  onSelected: (selection) {
+                    _pickupController.text = selection.description;
+                    _selectedPickup = selection;
+                  },
+                ),
                 const SizedBox(height: 16),
-                _buildAutocompleteField(controller: _dropoffController, labelText: 'Dropoff location'),
+                _buildAutocompleteField(
+                  controller: _dropoffController,
+                  labelText: 'Dropoff location',
+                  onSelected: (selection) {
+                    _dropoffController.text = selection.description;
+                    _selectedDropoff = selection;
+                  },
+                ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(items: const [DropdownMenuItem(value: 'now', child: Text('Pickup now'))], onChanged: (value) {}, value: 'now'),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(items: const [DropdownMenuItem(value: 'me', child: Text('For me'))], onChanged: (value) {}, value: 'me'),
                 const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isFetchingEstimates ? null : _handleSearch,
-                    child: _isFetchingEstimates ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Search'),
-                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                  ),
-                ),
+                SizedBox(width: double.infinity, child: ElevatedButton(
+                  onPressed: _isFetchingEstimates ? null : _handleSearch,
+                  child: _isFetchingEstimates ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Search'),
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                )),
               ],
             ),
           ),
@@ -208,6 +258,8 @@ class _DashboardWebState extends State<DashboardWeb> {
           child: GoogleMap(
             onMapCreated: _onMapCreated,
             initialCameraPosition: CameraPosition(target: _initialCameraPosition, zoom: 12.0),
+            markers: _markers,
+            polylines: _polylines,
           ),
         ),
       ],

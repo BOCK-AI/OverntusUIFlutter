@@ -13,10 +13,10 @@ class ApiService {
   late IO.Socket _socket; // <-- THIS WAS THE MISSING VARIABLE
 
   final _storage = const FlutterSecureStorage();
-  final String _baseUrl = "http://localhost:3000/api/v1";
+  final String _baseUrl = "http://localhost:3000";
 
   ApiService._internal() {
-    _dio = Dio(BaseOptions(baseUrl: _baseUrl));
+    _dio = Dio(BaseOptions(baseUrl: '$_baseUrl/api/v1'));
     if (kIsWeb) {
       final adapter = BrowserHttpClientAdapter();
       adapter.withCredentials = true;
@@ -33,25 +33,23 @@ class ApiService {
 
   }
   void _initSocket() {
-    _socket = IO.io(_baseUrl, <String, dynamic>{
-      'transports': ['websocket'],
-      'autoConnect': false,
-    });
+    _socket = IO.io(_baseUrl, IO.OptionBuilder()
+        .setTransports(['websocket']) // Use WebSocket only
+        .disableAutoConnect() // Connect manually
+        .build());
     _socket.onConnect((_) => print('ApiService: Socket connected! ID: ${_socket.id}'));
     _socket.onDisconnect((reason) => print('ApiService: Socket disconnected. Reason: $reason'));
   }
 
-  void connectSocket() { if (!_socket.connected) _socket.connect(); }
+  void connectSocket() { if (!_socket.connected){ _socket.connect();} }
   void disconnectSocket() { _socket.dispose(); _initSocket(); }
 
-  void listenToRideUpdates(int rideId, Function(dynamic) handler) {
+  void listenToRideUpdates(String eventName, Function(dynamic) handler) {
     connectSocket();
-    final eventName = 'ride-update-$rideId';
     _socket.on(eventName, handler);
   }
 
-  void stopListeningToRideUpdates(int rideId) {
-    final eventName = 'ride-update-$rideId';
+  void stopListeningToRideUpdates(String eventName) {
     _socket.off(eventName);
   }
 
@@ -251,4 +249,23 @@ Future<Map<String, dynamic>> updateRideStatus(int rideId, String status) async {
       throw Exception('Failed to update ride status: ${e.response?.data['msg'] ?? e.message}');
     }
   }
-}
+
+
+// Add this new method to your ApiService
+// In lib/api/api_service.dart
+
+Future<Map<String, dynamic>> initiateRide(String pickupPlaceId, String dropoffPlaceId) async {
+  try {
+    final response = await _dio.post(
+      '/rides/initiate',
+      data: {
+        'pickupPlaceId': pickupPlaceId,
+
+        'dropoffPlaceId': dropoffPlaceId,
+      },
+    );
+    return response.data;
+  } on DioException catch (e) {
+    throw Exception('Failed to initiate ride: ${e.response?.data['msg'] ?? e.message}');
+  }
+}}
