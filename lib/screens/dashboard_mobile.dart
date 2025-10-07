@@ -3,6 +3,9 @@ import 'mobile_home.dart';
 import 'mobile_services.dart';
 import 'mobile_activity.dart';
 import 'mobile_account.dart';
+import 'mobile_car.dart';
+// Placeholder for the new car page.
+
 
 class DashboardMobile extends StatefulWidget {
   final String userType;
@@ -23,6 +26,7 @@ class _DashboardMobileState extends State<DashboardMobile> {
   Widget build(BuildContext context) {
     final pages = [
       MobileHome(userName: widget.userType, onTabSwitch: _switchTab),
+      MobileCar(userName: widget.userType, onTabSwitch: _switchTab), // Car page
       MobileServices(onTabSwitch: _switchTab),
       MobileActivity(onTabSwitch: _switchTab),
       MobileAccount(userName: widget.userType, onTabSwitch: _switchTab),
@@ -35,6 +39,10 @@ class _DashboardMobileState extends State<DashboardMobile> {
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.directions_car),
+            label: 'Car',
           ),
           NavigationDestination(
             icon: Icon(Icons.grid_view),
