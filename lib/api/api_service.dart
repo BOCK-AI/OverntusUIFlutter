@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/place_prediction_model.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'dart:convert';
+import 'package:google_maps_flutter/google_maps_flutter.dart'; // <-- MISSING IMPORT
+
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -13,8 +15,8 @@ class ApiService {
   late IO.Socket _socket; // <-- THIS WAS THE MISSING VARIABLE
 
   final _storage = const FlutterSecureStorage();
-  final String _baseUrl = "http://localhost:3000";
-
+  final String _baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000/api/v1');
+  
   ApiService._internal() {
     _dio = Dio(BaseOptions(baseUrl: '$_baseUrl/api/v1'));
     if (kIsWeb) {
@@ -93,11 +95,13 @@ class ApiService {
   // ... (login, logout, getMyProfile, etc.)
 
   // --- AUTH METHODS ---
-  Future<void> requestOtp(String name, String phone, String role) async {
+  Future<String> requestOtp(String name, String phone, String role) async {
     try {
-      await _dio.post('/auth/login', data: {'name': name, 'phone': phone, 'role': role});
+      // The path is now just '/auth/login'
+      final response = await _dio.post('/auth/login', data: {'name': name, 'phone': phone, 'role': role});
+      return response.data['msg'];
     } on DioException catch (e) {
-      throw Exception('Failed to request OTP: ${e.response?.data['msg'] ?? e.message}');
+      throw Exception('Failed to request OTP: ${e.response?.data['msg'] ?? 'Route does not exist'}');
     }
   }
 
@@ -193,13 +197,18 @@ Future<List<dynamic>> getRideEstimates(String pickupAddress, String dropAddress)
     }
   }
 
-Future<Map<String, dynamic>> createRide(String pickupAddress, String dropAddress, String vehicle, double fare) async {
+Future<Map<String, dynamic>> createRide(
+    String pickupAddress,
+    String dropoffAddress,
+    String vehicle,
+    double fare
+  ) async {
     try {
       final response = await _dio.post('/rides', data: {
         'pickupAddress': pickupAddress,
-        'dropAddress': dropAddress,
+        'dropAddress': dropoffAddress,
         'vehicle': vehicle,
-        'fare': fare
+        'fare': fare,
       });
       return response.data;
     } on DioException catch (e) {
@@ -268,4 +277,49 @@ Future<Map<String, dynamic>> initiateRide(String pickupPlaceId, String dropoffPl
   } on DioException catch (e) {
     throw Exception('Failed to initiate ride: ${e.response?.data['msg'] ?? e.message}');
   }
-}}
+}
+
+// Add this new method to your ApiService
+
+Future<Map<String, dynamic>> getRoutePolyline(LatLng start, LatLng end) async {
+    try {
+      final response = await _dio.get(
+        '/rides/route',
+        queryParameters: {
+          'startLat': start.latitude,
+          'startLng': start.longitude,
+          'endLat': end.latitude,
+          'endLng': end.longitude,
+        },
+      );
+      // It correctly returns the full Map object from the backend
+      return response.data;
+    } on DioException catch (e) {
+      throw Exception('Failed to get route polyline: ${e.response?.data['msg'] ?? e.message}');
+    }
+  }
+
+// Add this new function to your ApiService class
+
+Future<PlacePrediction> getPlaceDetails(String placeId) async {
+  try {
+    // We will use our backend as a proxy to avoid CORS issues.
+    // This requires a new endpoint on the backend.
+    final response = await _dio.get(
+      '/misc/place-details', 
+      queryParameters: {'placeId': placeId},
+    );
+    
+    final result = response.data['result'];
+    return PlacePrediction(
+      description: result['formatted_address'],
+      placeId: placeId,
+      lat: result['geometry']['location']['lat'],
+      lng: result['geometry']['location']['lng'],
+    );
+  } on DioException catch (e) {
+    throw Exception('Failed to get place details: ${e.response?.data['msg'] ?? e.message}');
+  }
+}
+
+}
