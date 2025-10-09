@@ -15,8 +15,8 @@ class ApiService {
   late IO.Socket _socket; // <-- THIS WAS THE MISSING VARIABLE
 
   final _storage = const FlutterSecureStorage();
-  final String _baseUrl = "http://localhost:3000";
-
+  final String _baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000/api/v1');
+  
   ApiService._internal() {
     _dio = Dio(BaseOptions(baseUrl: '$_baseUrl/api/v1'));
     if (kIsWeb) {
