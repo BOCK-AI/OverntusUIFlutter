@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import '../api/api_service.dart';
 import './active_ride_page.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class AvailableRidesPage extends StatefulWidget {
   const AvailableRidesPage({super.key});
@@ -30,17 +31,20 @@ class _AvailableRidesPageState extends State<AvailableRidesPage> {
     });
   }
 
- void _acceptRide(int rideId) async {
-    try {
-      await _apiService.acceptRide(rideId);
-      if (!mounted) return;
+void _acceptRide(int rideId, LatLng pickup, LatLng dropoff) async {
+  try {
+    await _apiService.acceptRide(rideId);
+    if (!mounted) return;
 
-      // Instead of showing a SnackBar, we now navigate to the new page
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => ActiveRidePage(rideId: rideId),
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => ActiveRidePage(
+          rideId: rideId,
+          pickupLocation: pickup,
+          dropoffLocation: dropoff,
         ),
-      );
+      ),
+    );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -79,6 +83,8 @@ class _AvailableRidesPageState extends State<AvailableRidesPage> {
             itemCount: rides.length,
             itemBuilder: (context, index) {
               final ride = rides[index];
+              final pickupLatLng = LatLng(ride['pickupLatitude'], ride['pickupLongitude']);
+              final dropoffLatLng = LatLng(ride['dropLatitude'], ride['dropLongitude']);
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
@@ -86,7 +92,7 @@ class _AvailableRidesPageState extends State<AvailableRidesPage> {
                   subtitle: Text('To: ${ride['dropAddress']}\nFare: \$${ride['fare']}'),
                   isThreeLine: true,
                   trailing: ElevatedButton(
-                    onPressed: () => _acceptRide(ride['id']),
+                    onPressed: () => _acceptRide(ride['id'], pickupLatLng, dropoffLatLng),
                     child: const Text('Accept'),
                   ),
                 ),

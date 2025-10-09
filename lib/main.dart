@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'screens/auth_check_page.dart';
 import 'screens/login_page.dart';
@@ -35,13 +36,19 @@ class MyApp extends StatelessWidget {
           case '/ride_status':
             if (settings.arguments is Map<String, dynamic>) {
               final args = settings.arguments as Map<String, dynamic>;
-              // --- CORRECTED TYPE - Keep it as an int ---
-              final rideId = args['rideId'] as int; 
-              return MaterialPageRoute(builder: (_) => RideStatus(rideId: rideId));
-            }
-            return MaterialPageRoute(builder: (_) => const Scaffold(body: Center(child: Text('Error: Ride ID missing'))));
-          default:
-            return MaterialPageRoute(builder: (_) => const Scaffold(body: Center(child: Text('404: Page Not Found'))));
+              final rideId = args['rideId'] as int;
+              final pickupLocation = args['pickupLocation'] as LatLng;
+              final dropoffLocation = args['dropoffLocation'] as LatLng; // <-- Get the new argument
+
+              return MaterialPageRoute(
+                builder: (_) => RideStatus(
+                  rideId: rideId,
+                  pickupLocation: pickupLocation,
+                  dropoffLocation: dropoffLocation, // <-- Pass it to the widget
+      ),
+    );            }
+            return MaterialPageRoute(builder: (_) => const Scaffold(body: Center(child: Text('Error: Ride Data missing'))));
+          default: return MaterialPageRoute(builder: (_) => const Scaffold(body: Center(child: Text('404: Page Not Found'))));
         }
       },
     );
