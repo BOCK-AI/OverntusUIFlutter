@@ -4,39 +4,37 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.2.3 <4.0.0' # Uses a modern Dart SDK version
+  sdk: '>=3.2.3 <4.0.0' # Using your modern Dart SDK version
 
-# --- APPLICATION DEPENDENCIES ---
 dependencies:
   flutter:
     sdk: flutter
-  location: ^5.0.3 # <-- ADD THIS LINE (check pub.dev for latest)
-  flutter_polyline_points: ^2.0.0 # Or latest
 
-  # For making HTTP API calls
+  # --- CORE FUNCTIONALITY PACKAGES (FROM YOUR BRANCH) ---
+  location: ^5.0.3
+  flutter_polyline_points: ^2.0.0
   dio: ^5.4.1
-
   socket_io_client: ^2.0.3
-
-  # For secure on-device storage
   flutter_secure_storage: ^9.0.0
+  google_maps_flutter: ^2.5.3
+  
+  # --- UI & UTILITY PACKAGES (FROM YOUR TEAMMATE'S BRANCH) ---
+  url_launcher: ^6.3.1
+  google_fonts: ^4.0.4 # Note: I've updated this to a null-safe version
+
+  # --- Standard Package ---
   cupertino_icons: ^1.0.2
 
-  # For Google Maps widget
-  google_maps_flutter: ^2.5.3
-  google_maps_flutter_web: ^0.5.5
 
-  # For Google Places Autocomplete UI
-
-
-# --- DEVELOPMENT DEPENDENCIES ---
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^3.0.1 # Using a modern version
 
-  flutter_lints: ^3.0.1
 
 flutter:
   uses-material-design: true
+  
+  # Keep the assets section from your branch
   assets:
     - assets/

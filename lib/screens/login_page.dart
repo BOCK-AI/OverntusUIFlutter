@@ -2,26 +2,27 @@
 
 import 'package:flutter/material.dart';
 import '../api/api_service.dart';
-import 'dart:convert'; // Needed for jsonDecode
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _apiService = ApiService();
-  bool _showOtpScreen = false;
-  bool _isLoading = false;
-
-  final _loginFormKey = GlobalKey<FormState>();
+  // --- STATE AND CONTROLLERS FROM TEAMMATE'S BRANCH ---
+  final _formKey = GlobalKey<FormState>();
+  final _otpFormKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  String _userType = 'customer';
-
-  final _otpFormKey = GlobalKey<FormState>();
   final _otpController = TextEditingController();
+  String _userType = 'customer';
+  bool _isLoading = false;
+  bool _showOtpScreen = false;
+
+  // --- OUR API SERVICE (INJECTED) ---
+  final ApiService _apiService = ApiService();
 
   @override
   void dispose() {
@@ -31,13 +32,24 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // --- REAL API LOGIC (INJECTED) ---
   void _handleRequestOtp() async {
-    if (!_loginFormKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
     setState(() { _isLoading = true; });
     try {
-      await _apiService.requestOtp(_nameController.text, _phoneController.text, _userType);
+      await _apiService.requestOtp(
+        _nameController.text,
+        _phoneController.text,
+        _userType,
+      );
       if (!mounted) return;
-      setState(() { _showOtpScreen = true; _isLoading = false; });
+      setState(() {
+        _showOtpScreen = true;
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('OTP sent to your backend console!'), backgroundColor: Colors.blue),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
@@ -68,6 +80,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // --- TEAMMATE'S UI (MODIFIED TO USE OUR LOGIC) ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,6 +90,7 @@ class _LoginPageState extends State<LoginPage> {
           constraints: const BoxConstraints(maxWidth: 400),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 300),
+            transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
             child: _showOtpScreen ? _buildOtpForm() : _buildLoginForm(),
           ),
         ),
@@ -87,23 +101,49 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildLoginForm() {
     return Card(
       key: const ValueKey('loginForm'),
+      elevation: 2,
+      margin: const EdgeInsets.all(24),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Form(
-          key: _loginFormKey,
+          key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Welcome to Orventus', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 24),
-              TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: 'Full name'), validator: (v) => (v == null || v.isEmpty) ? 'Please enter your name' : null),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Full name'),
+                validator: (v) => (v == null || v.isEmpty) ? 'Please enter your name' : null,
+              ),
               const SizedBox(height: 16),
-              TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Mobile number'), keyboardType: TextInputType.phone, validator: (v) => (v == null || v.isEmpty) ? 'Please enter your mobile number' : null),
+              TextFormField(
+                controller: _phoneController,
+                decoration: const InputDecoration(labelText: 'Mobile number'),
+                keyboardType: TextInputType.phone,
+                validator: (v) => (v == null || v.isEmpty) ? 'Please enter your mobile number' : null,
+              ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(value: _userType, items: const [DropdownMenuItem(value: 'customer', child: Text('Customer')), DropdownMenuItem(value: 'rider', child: Text('Rider'))], onChanged: (v) => setState(() => _userType = v ?? 'customer'), decoration: const InputDecoration(labelText: 'I am a')),
+              DropdownButtonFormField<String>(
+                value: _userType,
+                items: const [
+                  DropdownMenuItem(value: 'customer', child: Text('Customer')),
+                  DropdownMenuItem(value: 'rider', child: Text('Rider')),
+                ],
+                onChanged: (v) => setState(() => _userType = v ?? 'customer'),
+                decoration: const InputDecoration(labelText: 'I am a'),
+              ),
               const SizedBox(height: 24),
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _isLoading ? null : _handleRequestOtp, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)), child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Continue'))),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleRequestOtp,
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                  child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Continue'),
+                ),
+              ),
             ],
           ),
         ),
@@ -114,6 +154,8 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildOtpForm() {
     return Card(
       key: const ValueKey('otpForm'),
+      elevation: 2,
+      margin: const EdgeInsets.all(24),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -123,12 +165,29 @@ class _LoginPageState extends State<LoginPage> {
             children: [
               Text('Verify OTP', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 16),
-              Text('An OTP was sent to ${_phoneController.text}', textAlign: TextAlign.center),
+              Text('An OTP will be shown in your backend terminal for phone number: ${_phoneController.text}', textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              TextFormField(controller: _otpController, decoration: const InputDecoration(labelText: '4-Digit OTP'), keyboardType: TextInputType.number, maxLength: 4, validator: (v) => (v == null || v.length < 4) ? 'Enter a valid OTP' : null),
+              TextFormField(
+                controller: _otpController,
+                decoration: const InputDecoration(labelText: '4-Digit OTP'),
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                textAlign: TextAlign.center,
+                validator: (v) => (v == null || v.length < 4) ? 'Enter a valid 4-digit OTP' : null,
+              ),
               const SizedBox(height: 24),
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _isLoading ? null : _handleVerifyOtp, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)), child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Verify and Log In'))),
-              TextButton(onPressed: _isLoading ? null : () => setState(() => _showOtpScreen = false), child: const Text('Go Back')),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleVerifyOtp,
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                  child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Verify and Log In'),
+                ),
+              ),
+              TextButton(
+                onPressed: _isLoading ? null : () => setState(() => _showOtpScreen = false),
+                child: const Text('Go Back'),
+              ),
             ],
           ),
         ),

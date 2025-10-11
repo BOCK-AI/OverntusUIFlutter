@@ -1,10 +1,14 @@
+// lib/screens/home_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../api/api_service.dart';
 import '../widgets/rider_dashboard_view.dart';
 import '../widgets/ride_options_dialog.dart';
+import '../models/place_prediction_model.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
 
-// The class name is now consistently `HomePage`
+// Class name changed to HomePage for consistency with main.dart
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -13,7 +17,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // --- STATE MANAGEMENT & CONTROLLERS (INJECTED) ---
+  // --- STATE AND LOGIC FROM YOUR BRANCH (INJECTED) ---
   final ApiService _apiService = ApiService();
   String? _accessToken;
   String? _userRole;
@@ -21,21 +25,14 @@ class _HomePageState extends State<HomePage> {
   bool _isFetchingEstimates = false;
   final _pickup = TextEditingController();
   final _dropoff = TextEditingController();
-
+  PlacePrediction? _selectedPickup;
+  PlacePrediction? _selectedDropoff;
+  
   @override
   void initState() {
     super.initState();
     _checkLoginStatus();
   }
-
-  @override
-  void dispose() {
-    _pickup.dispose();
-    _dropoff.dispose();
-    super.dispose();
-  }
-
-  // --- LOGIC FUNCTIONS (INJECTED) ---
 
   Future<void> _checkLoginStatus() async {
     const storage = FlutterSecureStorage();
@@ -63,7 +60,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
     if (_pickup.text.trim().isEmpty || _dropoff.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter pickup and dropoff locations.'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter locations.'), backgroundColor: Colors.red));
       return;
     }
     setState(() { _isFetchingEstimates = true; });
@@ -83,9 +80,7 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
     } finally {
-      if (mounted) {
-        setState(() { _isFetchingEstimates = false; });
-      }
+      if (mounted) setState(() { _isFetchingEstimates = false; });
     }
   }
 
@@ -98,19 +93,25 @@ class _HomePageState extends State<HomePage> {
         (selectedEstimate['fare'] as num).toDouble(),
       );
       final newRide = result['ride'];
-      final int newRideId = newRide['id'];
       if (!mounted) return;
-      Navigator.of(context).pushNamed('/ride_status', arguments: {'rideId': newRideId});
+      Navigator.of(context).pushNamed('/ride_status', arguments: {'rideId': newRide['id']});
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
     }
   }
+  // --- END OF INJECTED LOGIC ---
 
-  // --- ALL OF YOUR ORIGINAL UI HELPER METHODS (UNCHANGED) ---
+  @override
+  void dispose() {
+    _pickup.dispose();
+    _dropoff.dispose();
+    super.dispose();
+  }
+
+  // --- ALL OF YOUR TEAMMATE'S ORIGINAL UI HELPER METHODS ---
 
   double _maxBodyWidth(BoxConstraints c) => c.maxWidth.clamp(320.0, 1280.0);
-
   Widget _spacerH(double h) => SizedBox(height: h);
 
   Widget _pillButton({
@@ -146,25 +147,16 @@ class _HomePageState extends State<HomePage> {
       filled: true,
       fillColor: const Color(0xFFF1F1F1),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
     );
   }
 
   Widget _imagePlaceholder({double? height, BorderRadius? radius}) {
     return Container(
       height: height ?? 320,
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAEAEA),
-        borderRadius: radius ?? BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFEAEAEA), borderRadius: radius ?? BorderRadius.circular(18)),
       alignment: Alignment.center,
-      child: const Text(
-        'TODO: Add Image',
-        style: TextStyle(color: Colors.black54),
-      ),
+      child: const Text('TODO: Add Image', style: TextStyle(color: Colors.black54)),
     );
   }
 
@@ -174,10 +166,7 @@ class _HomePageState extends State<HomePage> {
     VoidCallback? onDetails,
   }) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF6F6F6),
-        borderRadius: BorderRadius.circular(18),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFF6F6F6), borderRadius: BorderRadius.circular(18)),
       padding: const EdgeInsets.all(22),
       child: Row(
         children: [
@@ -201,10 +190,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(width: 16),
-          Expanded(
-            flex: 2,
-            child: _imagePlaceholder(height: 120, radius: BorderRadius.circular(14)),
-          ),
+          Expanded(flex: 2, child: _imagePlaceholder(height: 120, radius: BorderRadius.circular(14))),
         ],
       ),
     );
@@ -274,7 +260,7 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
-
+  
   Widget _benefitRow(IconData icon, String text) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,8 +274,6 @@ class _HomePageState extends State<HomePage> {
 
   Widget _benefitDivider() => Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Colors.black12));
 
-  // --- BUILD METHOD (MODIFIED) ---
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -299,7 +283,7 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: _buildTopNav(context, isLoggedIn), // Using a helper for the dynamic AppBar
+      appBar: _buildTopNav(context, isLoggedIn), // Use our new dynamic AppBar
       body: SingleChildScrollView(
         child: (isLoggedIn && _userRole == 'rider')
             ? const RiderDashboardView()
@@ -308,26 +292,23 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- NEW DYNAMIC APPBAR HELPER (REPLACES _TopNav) ---
   AppBar _buildTopNav(BuildContext context, bool isLoggedIn) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
+    // This is a simplified version of your teammate's _TopNav, made dynamic
     return AppBar(
       backgroundColor: Colors.black,
-      automaticallyImplyLeading: false, // Prevents default back button
-      title: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Text('Orventus', style: TextStyle(color: primary, fontSize: 22, fontWeight: FontWeight.w800)),
-      ),
+      foregroundColor: Colors.white,
+      title: Text('Orventus', style: TextStyle(color: primary, fontSize: 22, fontWeight: FontWeight.w800)),
       actions: [
-        TextButton(onPressed: () {}, child: const Text('Ride', style: TextStyle(color: Colors.white))),
-        TextButton(onPressed: () {}, child: const Text('Drive', style: TextStyle(color: Colors.white))),
-        TextButton(onPressed: () {}, child: const Text('Business', style: TextStyle(color: Colors.white))),
-        TextButton.icon(onPressed: () {}, icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18), label: const Text('About'), style: TextButton.styleFrom(foregroundColor: Colors.white)),
+        TextButton(onPressed: () {}, child: const Text('Ride')),
+        TextButton(onPressed: () {}, child: const Text('Drive')),
+        TextButton(onPressed: () {}, child: const Text('Business')),
+        TextButton.icon(onPressed: () {}, icon: const Icon(Icons.keyboard_arrow_down, size: 18), label: const Text('About')),
         const Spacer(),
-        TextButton.icon(onPressed: () {}, icon: const Icon(Icons.public, color: Colors.white, size: 16), label: const Text('EN'), style: TextButton.styleFrom(foregroundColor: Colors.white)),
-        TextButton(onPressed: () {}, child: const Text('Help', style: TextStyle(color: Colors.white))),
+        TextButton.icon(onPressed: () {}, icon: const Icon(Icons.public, size: 16), label: const Text('EN')),
+        TextButton(onPressed: () {}, child: const Text('Help')),
         if (isLoggedIn) ...[
           if (_userRole == 'rider')
             TextButton(
@@ -336,11 +317,11 @@ class _HomePageState extends State<HomePage> {
             ),
           TextButton(
             onPressed: () => Navigator.of(context).pushNamed('/dashboard'),
-            child: const Text('My Profile', style: TextStyle(color: Colors.white)),
+            child: const Text('My Dashboard'),
           ),
-          IconButton(icon: const Icon(Icons.logout, color: Colors.white), onPressed: _logout, tooltip: 'Log Out'),
+          IconButton(icon: const Icon(Icons.logout), onPressed: _logout, tooltip: 'Log Out'),
         ] else ...[
-          TextButton(onPressed: () => Navigator.pushNamed(context, '/login'), child: const Text('Log In', style: TextStyle(color: Colors.white))),
+          TextButton(onPressed: () => Navigator.pushNamed(context, '/login'), child: const Text('Log In')),
           Padding(
             padding: const EdgeInsets.only(right: 12.0),
             child: ElevatedButton(
@@ -355,11 +336,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // --- HELPER TO BUILD THE CUSTOMER/LOGGED-OUT VIEW ---
   Widget _buildCustomerView(BuildContext context, bool isLoggedIn) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
+    // This is your teammate's original UI, with our logic connected
     return Column(
       children: [
         // HERO
@@ -429,12 +410,12 @@ class _HomePageState extends State<HomePage> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
-                      _suggestionCard(title: 'Ride', subtitle: 'Go anywhere with Orventus. Request a ride, hop in, and go.', onDetails: () => Navigator.pushNamed(context, '/login')),
-                      _suggestionCard(title: 'Reserve', subtitle: 'Reserve your ride in advance so you can relax on the day of your trip.', onDetails: () => Navigator.pushNamed(context, '/login')),
-                      _suggestionCard(title: 'Intercity', subtitle: 'Get convenient, affordable outstation cabs anytime at your door.', onDetails: () => Navigator.pushNamed(context, '/login')),
-                      _suggestionCard(title: 'Shuttle', subtitle: 'Lower-cost shared rides on professionally driven buses and vans.', onDetails: () => Navigator.pushNamed(context, '/login')),
-                      _suggestionCard(title: 'Courier', subtitle: 'Same-day item delivery made easy with Orventus.', onDetails: () => Navigator.pushNamed(context, '/login')),
-                      _suggestionCard(title: 'Rentals', subtitle: 'Request a trip for a block of time and make multiple stops.', onDetails: () => Navigator.pushNamed(context, '/login')),
+                      _suggestionCard(title: 'Ride', subtitle: 'Go anywhere with Orventus. Request a ride, hop in, and go.'),
+                      _suggestionCard(title: 'Reserve', subtitle: 'Reserve your ride in advance so you can relax on the day of your trip.'),
+                      _suggestionCard(title: 'Intercity', subtitle: 'Get convenient, affordable outstation cabs anytime at your door.'),
+                      _suggestionCard(title: 'Shuttle', subtitle: 'Lower-cost shared rides on professionally driven buses and vans.'),
+                      _suggestionCard(title: 'Courier', subtitle: 'Same-day item delivery made easy with Orventus.'),
+                      _suggestionCard(title: 'Rentals', subtitle: 'Request a trip for a block of time and make multiple stops.'),
                     ],
                   ),
                   _spacerH(40),

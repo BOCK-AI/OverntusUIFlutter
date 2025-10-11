@@ -1,15 +1,12 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
+import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import '../api/api_service.dart';
 import '../models/place_prediction_model.dart';
 import '../widgets/ride_options_dialog.dart';
-import 'dart:math'; // Needed for min/max functions
-import 'package:flutter_polyline_points/flutter_polyline_points.dart';// <-- NEW, RELIABLE PACKAGE
-
-// At the top of lib/screens/dashboard_web.dart
-
-// At the top of lib/screens/dashboard_web.dart
 
 class DashboardWeb extends StatefulWidget {
   const DashboardWeb({super.key});
@@ -18,16 +15,17 @@ class DashboardWeb extends StatefulWidget {
   State<DashboardWeb> createState() => _DashboardWebState();
 }
 
-class _DashboardWebState extends State<DashboardWeb> {
+class _DashboardWebState extends State<DashboardWeb> with SingleTickerProviderStateMixin {
+  // --- STATE FROM BOTH BRANCHES ---
   final ApiService _apiService = ApiService();
   final Location _locationService = Location();
-
   Map<String, dynamic>? _currentUser;
   bool _isLoading = true;
   bool _isFetchingEstimates = false;
 
   final TextEditingController _pickupController = TextEditingController();
   final TextEditingController _dropoffController = TextEditingController();
+  
   late GoogleMapController _mapController;
   LatLng _initialCameraPosition = const LatLng(12.9716, 77.5946);
 
@@ -35,6 +33,8 @@ class _DashboardWebState extends State<DashboardWeb> {
   PlacePrediction? _selectedDropoff;
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
+  
+  late final TabController _tabController = TabController(length: 3, vsync: this);
 
   @override
   void initState() {
@@ -46,16 +46,17 @@ class _DashboardWebState extends State<DashboardWeb> {
   void dispose() {
     _pickupController.dispose();
     _dropoffController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   // --- LOGIC FUNCTIONS ---
 
- Future<void> _initializeDashboard() async {
-    await _fetchProfile();
+  Future<void> _initializeDashboard() async {
+    await Future.wait([_fetchProfile(), _initializeLocation()]);
     if (mounted) setState(() => _isLoading = false);
   }
-  
+
   Future<void> _fetchProfile() async {
     try {
       final profileData = await _apiService.getMyProfile();
@@ -68,10 +69,8 @@ class _DashboardWebState extends State<DashboardWeb> {
   Future<void> _initializeLocation() async {
     try {
       bool serviceEnabled = await _locationService.serviceEnabled();
-      if (!serviceEnabled) {
-        serviceEnabled = await _locationService.requestService();
-        if (!serviceEnabled) return;
-      }
+      if (!serviceEnabled) serviceEnabled = await _locationService.requestService();
+      if (!serviceEnabled) return;
       PermissionStatus permissionGranted = await _locationService.hasPermission();
       if (permissionGranted == PermissionStatus.denied) {
         permissionGranted = await _locationService.requestPermission();
@@ -81,123 +80,16 @@ class _DashboardWebState extends State<DashboardWeb> {
       if (locationData.latitude != null && locationData.longitude != null) {
         final userLocation = LatLng(locationData.latitude!, locationData.longitude!);
         setState(() => _initialCameraPosition = userLocation);
-        // This check is important because the map might not be created yet
-        if (mounted && _mapController != null) {
-          _mapController.animateCamera(CameraUpdate.newLatLngZoom(userLocation, 15.0));
-        }
+        _mapController.animateCamera(CameraUpdate.newLatLngZoom(userLocation, 15.0));
       }
     } catch (e) {
       print('Error initializing location: $e');
     }
   }
-  
+
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    // After the map is created, we can try to move to the user's location if we already have it.
     _mapController.animateCamera(CameraUpdate.newLatLngZoom(_initialCameraPosition, 12.0));
-  }
-  
-  // In lib/screens/dashboard_web.dart
-
- // In lib/screens/dashboard_web.dart
-
-void _handleSearch() async {
-  if (_selectedPickup == null || _selectedDropoff == null) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select valid locations.'), backgroundColor: Colors.red));
-    return;
-  }
-  setState(() { _isFetchingEstimates = true; });
-
-  try {
-    final result = await _apiService.initiateRide(_selectedPickup!.placeId, _selectedDropoff!.placeId);
-    
-    _markers.clear();
-    _polylines.clear();
-
-    // --- THIS IS THE CORRECTED DECODING LOGIC ---
-    // 1. Create an instance of the PolylinePoints class from the package
-    PolylinePoints polylinePoints = PolylinePoints();
-    
-    // 2. Use its decodePolyline method
-    List<PointLatLng> decodedResult = polylinePoints.decodePolyline(result['polyline']);
-    
-    // 3. Convert the package's PointLatLng objects into GoogleMap's LatLng objects
-    List<LatLng> points = decodedResult.map((point) {
-      return LatLng(point.latitude, point.longitude);
-    }).toList();
-    // --- END CORRECTION ---
-
-    if (points.isEmpty) {
-      throw Exception("Could not decode polyline from the server.");
-    }
-
-    final Polyline routePolyline = Polyline(
-      polylineId: const PolylineId('route'),
-      color: Colors.blueAccent,
-      width: 6,
-      points: points,
-    );
-
-    final LatLng start = LatLng(result['startLocation']['lat'], result['startLocation']['lng']);
-    final LatLng end = LatLng(result['endLocation']['lat'], result['endLocation']['lng']);
-    _markers.add(Marker(markerId: const MarkerId('pickup'), position: start, infoWindow: const InfoWindow(title: 'Pickup')));
-    _markers.add(Marker(markerId: const MarkerId('dropoff'), position: end, infoWindow: const InfoWindow(title: 'Dropoff')));
-    
-    setState(() {
-      _polylines.add(routePolyline);
-    });
-
-    _mapController.animateCamera(CameraUpdate.newLatLngBounds(
-      LatLngBounds(
-        southwest: LatLng(min(start.latitude, end.latitude), min(start.longitude, end.longitude)),
-        northeast: LatLng(max(start.latitude, end.latitude), max(start.longitude, end.longitude)),
-      ),
-      100.0,
-    ));
-    
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (context) => RideOptionsDialog(
-        estimates: result['estimates'],
-        onRideSelected: (selectedEstimate) => _handleCreateRide(selectedEstimate),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
-  } finally {
-    if (mounted) setState(() { _isFetchingEstimates = false; });
-  }
-}
-  
-  void _handleCreateRide(Map<String, dynamic> selectedEstimate) async {
-    try {
-      // Call the function with the correct 4 arguments
-      final result = await _apiService.createRide(
-        _pickupController.text,
-        _dropoffController.text,
-        selectedEstimate['vehicle'],
-        (selectedEstimate['fare'] as num).toDouble(),
-      );
-      final newRide = result['ride'];
-      final int newRideId = newRide['id'];
-      if (!mounted) return;
-
-      // When navigating, we must now pass the pickup coordinates
-      Navigator.of(context).pushNamed(
-        '/ride_status', 
-        arguments: {
-          'rideId': newRideId,
-          'pickupLocation': LatLng(_selectedPickup!.lat!, _selectedPickup!.lng!),
-          'dropoffLocation': LatLng(_selectedDropoff!.lat!, _selectedDropoff!.lng!),
-
-        }
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
-    }
   }
 
   void _autofillCurrentLocation() async {
@@ -207,12 +99,7 @@ void _handleSearch() async {
         const String currentLocationText = "My Current Location";
         setState(() {
           _pickupController.text = currentLocationText;
-          _selectedPickup = PlacePrediction(
-            description: currentLocationText,
-            placeId: "", // NOTE: Using current location won't have a placeId, which might affect some logic.
-            lat: locationData.latitude,
-            lng: locationData.longitude,
-          );
+          _selectedPickup = PlacePrediction(description: currentLocationText, placeId: "", lat: locationData.latitude, lng: locationData.longitude);
         });
         _mapController.animateCamera(CameraUpdate.newLatLngZoom(LatLng(locationData.latitude!, locationData.longitude!), 15.0));
       }
@@ -220,30 +107,84 @@ void _handleSearch() async {
       print("Could not get current location: $e");
     }
   }
-
+  
+  void _handleSearch() async {
+    if (_selectedPickup == null || _selectedDropoff == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select valid locations.'), backgroundColor: Colors.red));
+      return;
+    }
+    setState(() { _isFetchingEstimates = true; });
+    try {
+      final result = await _apiService.initiateRide(_selectedPickup!.placeId, _selectedDropoff!.placeId);
+      _markers.clear();
+      _polylines.clear();
+      PolylinePoints polylinePoints = PolylinePoints();
+      List<PointLatLng> decodedResult = polylinePoints.decodePolyline(result['polyline']);
+      List<LatLng> points = decodedResult.map((p) => LatLng(p.latitude, p.longitude)).toList();
+      if (points.isEmpty) throw Exception("Could not decode polyline");
+      final Polyline routePolyline = Polyline(polylineId: const PolylineId('route'), color: Colors.blueAccent, width: 6, points: points);
+      final LatLng start = LatLng(result['startLocation']['lat'], result['startLocation']['lng']);
+      final LatLng end = LatLng(result['endLocation']['lat'], result['endLocation']['lng']);
+      _markers.add(Marker(markerId: const MarkerId('pickup'), position: start, infoWindow: const InfoWindow(title: 'Pickup')));
+      _markers.add(Marker(markerId: const MarkerId('dropoff'), position: end, infoWindow: const InfoWindow(title: 'Dropoff')));
+      setState(() => _polylines.add(routePolyline));
+      _mapController.animateCamera(CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(min(start.latitude, end.latitude), min(start.longitude, end.longitude)),
+          northeast: LatLng(max(start.latitude, end.latitude), max(start.longitude, end.longitude)),
+        ), 100.0
+      ));
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (context) => RideOptionsDialog(
+          estimates: result['estimates'],
+          onRideSelected: (selectedEstimate) => _handleCreateRide(selectedEstimate),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() { _isFetchingEstimates = false; });
+    }
+  }
+  
+  void _handleCreateRide(Map<String, dynamic> selectedEstimate) async {
+    try {
+      final result = await _apiService.createRide(
+        _pickupController.text,
+        _dropoffController.text,
+        selectedEstimate['vehicle'],
+        (selectedEstimate['fare'] as num).toDouble(),
+      );
+      final newRide = result['ride'];
+      if (!mounted) return;
+      Navigator.of(context).pushNamed(
+        '/ride_status', 
+        arguments: {
+          'rideId': newRide['id'],
+          'pickupLocation': LatLng(_selectedPickup!.lat!, _selectedPickup!.lng!),
+          'dropoffLocation': LatLng(_selectedDropoff!.lat!, _selectedDropoff!.lng!),
+        }
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+    }
+  }
+  
   Widget _buildAutocompleteField({
     required TextEditingController controller,
     required String labelText,
     required Function(PlacePrediction) onSelected,
   }) {
-    return Autocomplete<PlacePrediction>(
-      displayStringForOption: (option) => option.description,
-      optionsBuilder: (value) async {
-        if (value.text.isEmpty) return const Iterable.empty();
-        return await _apiService.getPlacePredictions(value.text);
-      },
-      onSelected: (selection) async {
-        try {
-          final placeDetails = await _apiService.getPlaceDetails(selection.placeId);
-          controller.text = placeDetails.description;
-          onSelected(placeDetails);
-        } catch (e) {
-          print("Error getting place details: $e");
-        }
-      },
-      fieldViewBuilder: (context, fieldController, fieldFocusNode, onFieldSubmitted) {
-        return TextField(controller: fieldController, focusNode: fieldFocusNode, decoration: InputDecoration(labelText: labelText));
-      },
+    return TypeAheadField<PlacePrediction>(
+      controller: controller,
+      suggestionsCallback: (pattern) => _apiService.getPlacePredictions(pattern),
+      itemBuilder: (context, suggestion) => ListTile(title: Text(suggestion.description)),
+      onSelected: onSelected,
+      builder: (context, controller, focusNode) => TextField(controller: controller, focusNode: focusNode, decoration: InputDecoration(labelText: labelText)),
     );
   }
 
@@ -273,50 +214,30 @@ void _handleSearch() async {
       children: [
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Get a ride', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                _buildAutocompleteField(
-                  controller: _pickupController,
-                  labelText: 'Pickup location',
-                  onSelected: (selection) {
-                    _pickupController.text = selection.description;
-                    _selectedPickup = selection;
-                  },
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(icon: Icon(Icons.drive_eta), text: "Ride"),
+                    Tab(icon: Icon(Icons.delivery_dining), text: "Delivery"),
+                    Tab(icon: Icon(Icons.event), text: "Reserve"),
+                  ],
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _autofillCurrentLocation,
-                    icon: const Icon(Icons.my_location, size: 16),
-                    label: const Text('Use my current location'),
-                  ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildRideTab(),
+                    const Center(child: Text("Delivery Feature - Coming Soon", textAlign: TextAlign.center)),
+                    const Center(child: Text("Reserve Feature - Coming Soon", textAlign: TextAlign.center)),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                _buildAutocompleteField(
-                  controller: _dropoffController,
-                  labelText: 'Dropoff location',
-                  onSelected: (selection) {
-                    _dropoffController.text = selection.description;
-                    _selectedDropoff = selection;
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(items: const [DropdownMenuItem(value: 'now', child: Text('Pickup now'))], onChanged: (value) {}, value: 'now'),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(items: const [DropdownMenuItem(value: 'me', child: Text('For me'))], onChanged: (value) {}, value: 'me'),
-                const SizedBox(height: 24),
-                SizedBox(width: double.infinity, child: ElevatedButton(
-                  onPressed: _isFetchingEstimates ? null : _handleSearch,
-                  child: _isFetchingEstimates ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Search'),
-                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                )),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         Expanded(
@@ -328,6 +249,53 @@ void _handleSearch() async {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRideTab() {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Get a ride', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            _buildAutocompleteField(
+              controller: _pickupController,
+              labelText: 'Pickup location',
+              onSelected: (selection) => setState(() => _selectedPickup = selection),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _autofillCurrentLocation,
+                icon: const Icon(Icons.my_location, size: 16),
+                label: const Text('Use my current location'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildAutocompleteField(
+              controller: _dropoffController,
+              labelText: 'Dropoff location',
+              onSelected: (selection) => setState(() => _selectedDropoff = selection),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(items: const [DropdownMenuItem(value: 'now', child: Text('Pickup now'))], onChanged: (value) {}, value: 'now'),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(items: const [DropdownMenuItem(value: 'me', child: Text('For me'))], onChanged: (value) {}, value: 'me'),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isFetchingEstimates ? null : _handleSearch,
+                child: _isFetchingEstimates ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Search'),
+                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
