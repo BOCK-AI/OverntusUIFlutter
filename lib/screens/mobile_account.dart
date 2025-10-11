@@ -1,84 +1,57 @@
 import 'package:flutter/material.dart';
-import '../widgets/site_common.dart';
+import '../api/api_service.dart';
 
-class MobileAccount extends StatelessWidget {
-  final String userName;
-  const MobileAccount({super.key, required this.userName});
+class MobileAccount extends StatefulWidget {
+  const MobileAccount({super.key});
+  @override
+  State<MobileAccount> createState() => _MobileAccountState();
+}
+
+class _MobileAccountState extends State<MobileAccount> {
+  final ApiService _apiService = ApiService();
+  Future<Map<String, dynamic>>? _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _apiService.getMyProfile();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      appBar: AppBar(title: const Text("Account")),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _profileFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+          final userName = snapshot.data?['user']?['name'] ?? 'User';
+          return ListView(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    userName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text('★ 4.9'),
-                ],
+              ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person)),
+                title: Text(userName),
+                subtitle: const Text("View Profile"),
+                onTap: () => Navigator.of(context).pushNamed('/profile'),
               ),
-              const CircleAvatar(
-                radius: 28,
-                child: Icon(Icons.person),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text("Log Out"),
+                onTap: () async {
+                  await _apiService.logout();
+                  if (mounted) Navigator.of(context).pushReplacementNamed('/auth_check');
+                },
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            children: const [
-              _QuickCard(icon: Icons.help, label: 'Help'),
-              _QuickCard(icon: Icons.account_balance_wallet, label: 'Wallet'),
-              _QuickCard(icon: Icons.history, label: 'Activity'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Card(
-            child: ListTile(
-              title: Text('Invite friends'),
-              subtitle: Text('Earn credits'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Log out'),
-            onTap: () => Navigator.pushReplacementNamed(context, '/login'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
-}
-
-class _QuickCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _QuickCard({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: 100,
-        padding: const EdgeInsets.all(12),
-        decoration: cardDecoration(context),
-        child: Column(
-          children: [
-            Icon(icon),
-            const SizedBox(height: 8),
-            Text(label),
-          ],
-        ),
-      );
 }

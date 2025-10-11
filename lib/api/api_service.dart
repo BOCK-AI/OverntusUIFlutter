@@ -15,7 +15,7 @@ class ApiService {
   late IO.Socket _socket; // <-- THIS WAS THE MISSING VARIABLE
 
   final _storage = const FlutterSecureStorage();
-  final String _baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000/api/v1');
+  final String _baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000');
   
   ApiService._internal() {
     _dio = Dio(BaseOptions(baseUrl: '$_baseUrl/api/v1'));
@@ -57,36 +57,16 @@ class ApiService {
 
   // --- THIS IS THE DIAGNOSTIC FUNCTION ---
   Future<List<PlacePrediction>> getPlacePredictions(String input) async {
-    print('--- [1] getPlacePredictions CALLED with input: "$input" (Type: ${input.runtimeType}) ---');
-    
-    if (input.trim().isEmpty) {
-      print('--- [2] EXIT: Input is empty. Returning []. ---');
-      return [];
-    }
-
-    print('--- [3] Input guard passed. Entering TRY block. ---');
+    if (input.trim().length < 2) return [];
     try {
-      print('--- [4] Making API call to /misc/places... ---');
       final response = await _dio.get('/misc/places', queryParameters: {'input': input});
-      print('--- [5] API call SUCCEEDED. Status: ${response.statusCode} ---');
-
       if (response.data != null && response.data['status'] == 'OK') {
         final List<dynamic> predictionsJson = response.data['predictions'];
-        final predictions = predictionsJson.map((json) => PlacePrediction.fromJson(json)).toList();
-        print('--- [6] SUCCESS: Got ${predictions.length} predictions. Returning data. ---');
-        return predictions;
-      } else {
-        print('--- [7] API returned non-OK status: ${response.data['status']}. Returning []. ---');
-        return [];
-      }
-    } on DioException catch (e) {
-      print('--- [8] DIO EXCEPTION CAUGHT: ${e.message} ---');
-      if (e.response != null) {
-        print('--- [8a] Response Data: ${e.response?.data} ---');
+        return predictionsJson.map((json) => PlacePrediction.fromJson(json)).toList();
       }
       return [];
     } catch (e) {
-      print('--- [9] UNKNOWN EXCEPTION CAUGHT: $e ---');
+      print('Failed to get predictions via proxy: $e');
       return [];
     }
   }

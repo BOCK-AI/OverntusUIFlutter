@@ -6,7 +6,6 @@ import '../api/api_service.dart';
 import '../widgets/rider_dashboard_view.dart';
 import '../widgets/ride_options_dialog.dart';
 import '../models/place_prediction_model.dart';
-import 'package:flutter_typeahead/flutter_typeahead.dart';
 
 // Class name changed to HomePage for consistency with main.dart
 class HomePage extends StatefulWidget {

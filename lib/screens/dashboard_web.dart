@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
-import 'package:flutter_typeahead/flutter_typeahead.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import '../api/api_service.dart';
 import '../models/place_prediction_model.dart';
@@ -109,8 +108,8 @@ class _DashboardWebState extends State<DashboardWeb> with SingleTickerProviderSt
   }
   
   void _handleSearch() async {
-    if (_selectedPickup == null || _selectedDropoff == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select valid locations.'), backgroundColor: Colors.red));
+    if (_selectedPickup == null || _selectedDropoff == null || _selectedPickup!.placeId.isEmpty || _selectedDropoff!.placeId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select valid locations from the search suggestions.'), backgroundColor: Colors.red));
       return;
     }
     setState(() { _isFetchingEstimates = true; });
@@ -179,14 +178,32 @@ class _DashboardWebState extends State<DashboardWeb> with SingleTickerProviderSt
     required String labelText,
     required Function(PlacePrediction) onSelected,
   }) {
-    return TypeAheadField<PlacePrediction>(
-      controller: controller,
-      suggestionsCallback: (pattern) => _apiService.getPlacePredictions(pattern),
-      itemBuilder: (context, suggestion) => ListTile(title: Text(suggestion.description)),
-      onSelected: onSelected,
-      builder: (context, controller, focusNode) => TextField(controller: controller, focusNode: focusNode, decoration: InputDecoration(labelText: labelText)),
+    return Autocomplete<PlacePrediction>(
+      displayStringForOption: (option) => option.description,
+      optionsBuilder: (value) async {
+        if (value.text.length < 2) return const Iterable.empty();
+        return await _apiService.getPlacePredictions(value.text);
+      },
+      onSelected: (selection) async {
+        try {
+          final placeDetails = await _apiService.getPlaceDetails(selection.placeId);
+          controller.text = placeDetails.description;
+          onSelected(placeDetails);
+        } catch (e) {
+          print("Error getting place details: $e");
+        }
+      },
+      fieldViewBuilder: (context, fieldController, fieldFocusNode, onFieldSubmitted) {
+        return TextField(
+          controller: fieldController,
+          focusNode: fieldFocusNode,
+          decoration: InputDecoration(labelText: labelText),
+          onChanged: (text) => controller.text = text,
+        );
+      },
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -210,47 +227,99 @@ class _DashboardWebState extends State<DashboardWeb> with SingleTickerProviderSt
   }
 
   Widget _buildRideBookingUI() {
-    return Row(
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
+  return Row(
+    children: [
+      // Left Panel: Ride Booking Form
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: TabBar(
-                  controller: _tabController,
-                  tabs: const [
-                    Tab(icon: Icon(Icons.drive_eta), text: "Ride"),
-                    Tab(icon: Icon(Icons.delivery_dining), text: "Delivery"),
-                    Tab(icon: Icon(Icons.event), text: "Reserve"),
-                  ],
+              const Text('Get a ride', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+              
+              // Pickup Field
+              _buildAutocompleteField(
+                controller: _pickupController,
+                labelText: 'Pickup location',
+                onSelected: (selection) {
+                  setState(() {
+                    _pickupController.text = selection.description;
+                    _selectedPickup = selection;
+                  });
+                },
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: _autofillCurrentLocation,
+                  icon: const Icon(Icons.my_location, size: 16),
+                  label: const Text('Use my current location'),
                 ),
               ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildRideTab(),
-                    const Center(child: Text("Delivery Feature - Coming Soon", textAlign: TextAlign.center)),
-                    const Center(child: Text("Reserve Feature - Coming Soon", textAlign: TextAlign.center)),
-                  ],
+              const SizedBox(height: 8),
+
+              // Dropoff Field
+              _buildAutocompleteField(
+                controller: _dropoffController,
+                labelText: 'Dropoff location',
+                onSelected: (selection) {
+                  setState(() {
+                    _dropoffController.text = selection.description;
+                    _selectedDropoff = selection;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Dropdowns
+              DropdownButtonFormField<String>(
+                items: const [DropdownMenuItem(value: 'now', child: Text('Pickup now'))],
+                onChanged: (value) {},
+                value: 'now',
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                items: const [DropdownMenuItem(value: 'me', child: Text('For me'))],
+                onChanged: (value) {},
+                value: 'me',
+                decoration: const InputDecoration(border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 24),
+              
+              // Search Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isFetchingEstimates ? null : _handleSearch,
+                  child: _isFetchingEstimates
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Search'),
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
                 ),
               ),
             ],
           ),
         ),
-        Expanded(
-          child: GoogleMap(
-            onMapCreated: _onMapCreated,
-            initialCameraPosition: CameraPosition(target: _initialCameraPosition, zoom: 12.0),
-            markers: _markers,
-            polylines: _polylines,
+      ),
+      // Right Panel: Map Placeholder
+      Expanded(
+        child: GoogleMap(
+          onMapCreated: _onMapCreated,
+          initialCameraPosition: CameraPosition(
+            target: _initialCameraPosition,
+            zoom: 12.0,
           ),
+          markers: _markers,
+          polylines: _polylines,
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
 
   Widget _buildRideTab() {
     return SingleChildScrollView(
