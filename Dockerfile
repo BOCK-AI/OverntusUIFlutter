@@ -1,6 +1,6 @@
 # Stage 1: Build the Flutter web app
 # Use a specific Flutter version to ensure consistency
-FROM ghcr.io/cirrus-actions/flutter:3.10.0 AS build
+FROM heyari/flutter:3.10.0 AS build
 WORKDIR /app
 
 # Copy the project files into the container
