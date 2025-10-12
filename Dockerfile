@@ -1,27 +1,27 @@
-# Stage 1: Build the Flutter web app
-# Use a specific Flutter version to ensure consistency
-FROM heyari/flutter:3.10.0 AS build
+# Stage 1: Build the Flutter web app using the OFFICIAL Google Dart image
+FROM dart:stable AS build
+
+# Install Flutter and other necessary tools
+RUN apt-get update && apt-get install -y curl git unzip
+RUN git clone https://github.com/flutter/flutter.git /usr/local/flutter
+ENV PATH="/usr/local/flutter/bin:${PATH}"
+RUN flutter precache --web
+
+# Set up the application directory
 WORKDIR /app
-
-# Copy the project files into the container
-COPY . .
-
-# Get Flutter dependencies
+COPY pubspec.* ./
 RUN flutter pub get
 
-# Build the web application for release
-RUN flutter build web --release
+# Copy the rest of the application code
+COPY . .
+
+# IMPORTANT: Define the build argument for the API URL
+ARG API_BASE_URL
+RUN flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
 
 
 # Stage 2: Serve the built files with Nginx
-# Use a lightweight web server image
 FROM nginx:stable-alpine
-
-# Copy the built Flutter app from the 'build' stage
 COPY --from=build /app/build/web /usr/share/nginx/html
-
-# Expose port 80 (the default HTTP port)
 EXPOSE 80
-
-# The command to start the Nginx server
 CMD ["nginx", "-g", "daemon off;"]
