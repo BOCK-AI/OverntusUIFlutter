@@ -18,7 +18,7 @@ class ApiService {
   final String _baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:3000');
   
   ApiService._internal() {
-    _dio = Dio(BaseOptions(baseUrl: '$_baseUrl/api/v1'));
+    _dio = Dio(BaseOptions(baseUrl: '$_baseUrl'));
     if (kIsWeb) {
       final adapter = BrowserHttpClientAdapter();
       adapter.withCredentials = true;
